@@ -1,0 +1,184 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+	<meta charset="UTF-8" />
+    <title>Flappy Bird by Legendword</title>
+    <script src="dependencies/ljs.js"></script>
+    <script src="dependencies/phaser.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+        }
+        #game {position:fixed;top:0;bottom:0;left:0;right:0;margin:auto;height:512px;width:288px;}
+    </style>
+</head>
+<body>
+<div id="game"></div>
+<script type="text/javascript">
+/* Legendword Flappy Bird
+   pictures from the Internet
+   */
+var srcs = ["background","bird1","bird2","bird3","ground","getready","taptap","pipe","gameover","endpanel","coin1","coin2","new","startbtn"],
+	options = {
+		holeSize: 110,
+		pipeVelocity: -140,
+		birdVelocity: -300,
+		birdGravity: 1100,
+		pipeInterval: 1400, //in milliseconds
+		pipeDistance: 122, //if pipeInterval change then pipeDistance change, value determined by (new pipe's x - old pipe's x - pipe width(54)), that is (playstate.pipes.getAt(3).x-playstate.pipes.getAt(1).x-54)
+		numX: 132,
+		numY: 50,
+		version: "1.2"
+	},
+	score = 0,
+	high = 0,
+	currentBird = "bird1",
+	isOver = false;
+var loadstate = {
+	preload: function(){
+		for (var i=0;i<srcs.length;i++){
+			game.load.image(srcs[i],"src/"+srcs[i]+".png");
+		}
+		//numbers
+		for (var i=0;i<10;i++){
+			game.load.image(i.toString(),"src/num"+i+".png");
+		}
+	},
+	create: function(){
+		game.state.start("ready");
+	}
+};
+var readystate = {
+	create: function(){
+		isOver = false;
+		this.bg = game.add.sprite(0,0,"background");
+		this.bd = game.add.sprite(0,game.world.height-112,"ground");
+		this.rd = game.add.sprite(52,102,"getready");
+		this.inf = game.add.sprite(87,180,"taptap");
+		currentBird = "bird"+(Math.floor(Math.random()*3)+1);
+		game.add.sprite(50,210,currentBird);
+		game.add.text(10,10,"Click or press SPACEBAR to start.\nv"+options.version,{font:"2px Monospace",fill:"#fff"});
+		//this.inf.scale.setTo(2,2);
+		if (cookie.get("lflappybird_high")!="") high = parseInt(cookie.get("lflappybird_high"));
+		game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR).onDown.add(this.start,this);
+		game.input.activePointer.leftButton.onDown.add(this.start,this);
+	},
+	start: function(){
+		game.input.activePointer.leftButton.onDown.remove(this.start,this);
+		game.state.start("play");
+	}
+};
+var playstate = {
+	create: function(){
+		game.physics.startSystem(Phaser.Physics.ARCADE);
+		this.bg = game.add.sprite(0,0,"background");
+		this.bird = game.add.sprite(50,210,currentBird);
+		game.physics.arcade.enable(this.bird);
+		this.bird.body.gravity.y = options.birdGravity;
+		this.bird.anchor.setTo(-0.2,0.5);
+		this.bird.collideWorldBounds = true;
+		game.input.keyboard.addKey(Phaser.Keyboard.SPACEBAR).onDown.add(this.jump,this);
+		game.input.activePointer.leftButton.onDown.add(this.jump,this);
+		this.pipes = game.add.group();
+		this.pipes.enableBody = true;
+		this.pipes.createMultiple(20,"pipe");
+		this.lastPipe = 0;
+		score = 0;
+		this.nums = game.add.group();
+		this.nums.create(options.numX,options.numY,"0");
+		game.add.text(10,10,"Flappy Bird by Legendword",{font:"2pt Monospace",fill:"#fff"});
+		this.bd = game.add.sprite(0,game.world.height-112,"ground");
+		game.physics.arcade.enable(this.bd);
+		this.bd.body.immovable = true;
+		this.timer = game.time.events.loop(options.pipeInterval,this.addpipes,this);
+	},
+	update: function(){
+		game.physics.arcade.overlap(this.bird,this.bd,this.birddie,null,this);
+		game.physics.arcade.collide(this.bird,this.bd);
+		game.physics.arcade.overlap(this.bird,this.pipes,this.birddie,null,this);
+		//this.bd.bringToTop();
+		//this.nums.bringToTop();
+		if (this.bird.angle<120&&!isOver) this.bird.angle += 1;
+	},
+	birddie: function(){
+		if (this.bird.alive==false) return;
+		this.bird.alive = false;
+		game.time.events.remove(this.timer);
+		this.pipes.forEachAlive(function(p){
+			p.body.velocity.x = 0;
+		});
+		game.input.keyboard.removeKey(Phaser.Keyboard.SPACEBAR); //remove spacebar jump
+		this.over();
+	},
+	addpipe: function(x,y){
+		var pipe = this.pipes.getFirstDead();
+		pipe.reset(x,y);
+		pipe.body.velocity.x = options.pipeVelocity;
+		return pipe;
+	},
+	addpipes: function(){
+		var f = Math.floor(Math.random()*(360-options.holeSize)) + 20; //400-holeSize
+		this.addpipe(288,f-640);
+		this.lastPipe = this.addpipe(288,f+options.holeSize);
+		//remove old pipes&add score
+		this.numChange(score++,this.nums);
+		this.pipes.forEachAlive(function(p){
+			if (p.x<0) p.alive = false;
+		});
+	},
+	jump: function(){
+		this.bird.body.velocity.y = options.birdVelocity;
+		game.add.tween(this.bird).to({angle:-15},50).start();
+	},
+	numChange: function(n,q){ //used in score changing
+		var g = n.toString().split("");
+		var p = q.children;
+		for (var i=0;i<p.length;i++){
+			p[i].loadTexture(g[i]);
+		}
+		for (var i=p.length;i<g.length;i++){
+			q.create(options.numX+24*i,options.numY,g[i]);
+		}
+	},
+	numOnce: function(n,x,y){ //draw numbers at once
+		var g = n.toString().split("").reverse();
+		for (var i=0;i<g.length;i++){
+			var h = game.add.sprite(x-22*i,y,g[i]);
+			h.scale.setTo(0.8,0.8);
+		}
+	},
+	over: function(){
+		this.nums.visible = false;
+		isOver = true;
+		game.add.sprite(52,102,"gameover");
+		game.add.sprite(31,160,"endpanel");
+		//check if score has to decrease
+		if (this.lastPipe.x-this.bird.x>options.pipeDistance) score -= 1;
+		if (--score<0) score = 0;
+		if (score>=10) {
+			if (score>=30) var medal = "coin2";
+			else var medal = "coin1";
+			this.endmedal = game.add.sprite(57,200,"coin1");
+		}
+		this.numOnce(score,215,190); //score
+		if (score>high) {
+			game.add.sprite(160,220,"new");
+			high = score;
+			cookie.set("lflappybird_high",high);
+		}
+		this.numOnce(high,215,233); //high
+		game.input.activePointer.leftButton.onDown.removeAll();
+		this.endbutton = game.add.button(92,310,"startbtn",function(){
+			game.state.start("load");
+		});
+	}
+};
+var game = new Phaser.Game(288, 512, Phaser.AUTO, 'game'),
+	score = 0;
+game.state.add("load",loadstate);
+game.state.add("ready",readystate);
+game.state.add("play",playstate);
+game.state.start("load");
+</script>
+</body>
+</html>
